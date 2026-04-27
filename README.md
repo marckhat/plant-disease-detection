@@ -1,21 +1,75 @@
-# plant-disease-detection
+# Plant Disease Detection
 
-Computer vision **leaf image classification** system that predicts plant disease classes from RGB images and provides **high-level treatment or management recommendations** via simple rules.
+PyTorch-based computer vision project for plant disease image classification from leaf photos, with a focus on robust evaluation under real-world domain shift.
 
-## Scope
+## Project Overview
 
-- **Training dataset**: PlantVillage (clean images)
-- **Robustness evaluation**: PlantDoc (real-world images)
-- **Models compared**: ResNet50, EfficientNet-B0 (PyTorch). During experimentation, **both models will be trained and evaluated**; **one final model will be selected** for deployment in the Streamlit demo.
-- **Metrics**: accuracy, precision, recall, F1-score, confusion matrix
-- **Explainability**: Grad-CAM visualizations
-- **Demo**: simple Streamlit app using the selected final model
+- **Training dataset (source domain):** PlantVillage (clean, lab-like images)
+- **Evaluation dataset (target domain):** PlantDoc (real-world field images)
+- **Model comparison:** ResNet50 vs EfficientNet-B0
+- **Final model selection:** both models are trained/evaluated, then one is selected for deployment
 
-## Planned pipeline (high level)
+## Domain Shift and Fine-Tuning
 
-1. Prepare data: organize datasets, create train/val/test splits, define transforms.
-2. Train: train ResNet50 and EfficientNet-B0 on PlantVillage.
-3. Evaluate: compute metrics + confusion matrix on PlantVillage splits and PlantDoc robustness set.
-4. Explain: generate Grad-CAM examples for qualitative inspection.
-5. Recommend: map predicted disease → high-level treatment or management recommendations (rule-based).
-6. Demo: Streamlit UI that loads one final model for inference + Grad-CAM + recommendation text.
+The project explicitly studies **domain shift**: models trained on PlantVillage often perform worse on PlantDoc due to background clutter, lighting variation, and image quality differences.  
+To address this, the training pipeline supports **fine-tuning on PlantDoc splits** while preserving a consistent class mapping across datasets.
+
+## Setup
+
+### 1) Clone the repository
+
+```bash
+git clone <your-repo-url>
+cd plant-disease-detection
+```
+
+### 2) Create and activate a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+Windows (PowerShell):
+
+```bash
+.venv\Scripts\Activate.ps1
+```
+
+macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+### 3) Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4) Place datasets
+
+Put raw datasets under:
+
+```text
+data/raw/
+  plantvillage/
+  plantdoc/
+```
+
+Expected split-first structure:
+
+```text
+data/raw/plantvillage/
+  train/
+  val/
+
+data/raw/plantdoc/
+  train/
+  test/
+```
+
+## Notes
+
+- `data/` and `results/` are git-ignored to keep repository pushes clean.
+- Model checkpoints (`*.pt`, `*.pth`, `*.ckpt`, `*.onnx`) are excluded from version control.

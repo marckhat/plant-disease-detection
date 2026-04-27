@@ -1,10 +1,5 @@
 torch
 torchvision
-numpy
-pandas
+torchaudio
 scikit-learn
 matplotlib
-opencv-python
-Pillow
-streamlit
-
