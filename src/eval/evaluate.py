@@ -9,6 +9,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import torch
+import torch.nn.functional as F
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -23,12 +24,15 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from torchvision import transforms
+
 from src.data.dataset import (
     load_plantdoc_test,
     load_plantdoc_train,
     load_plantvillage_val,
     make_eval_dataloader,
 )
+from src.data.transforms import IMAGENET_MEAN, IMAGENET_STD
 from src.models.model_factory import get_model
 
 
@@ -45,6 +49,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--num-workers", type=int, default=0)
     p.add_argument("--image-size", type=int, default=224)
+    p.add_argument(
+        "--tta",
+        action="store_true",
+        help="Enable Test-Time Augmentation: average predictions over multiple augmented views.",
+    )
+    p.add_argument(
+        "--tta-n",
+        type=int,
+        default=8,
+        help="Number of augmented views per image for TTA (default: 8).",
+    )
     return p.parse_args()
 
 
@@ -75,6 +90,66 @@ def collect_predictions(model, loader, device):
         preds = logits.argmax(dim=1)
         y_true.extend(targets.cpu().tolist())
         y_pred.extend(preds.cpu().tolist())
+    return y_true, y_pred
+
+
+def build_tta_transforms(image_size: int) -> list:
+    """8 deterministic TTA views: original + flips + rotations + crops."""
+    normalize = transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+    sz = image_size
+    crop_sz = int(sz * 0.85)
+
+    def make(*extra):
+        return transforms.Compose([
+            *extra,
+            transforms.Resize((sz, sz)),
+            transforms.ToTensor(),
+            normalize,
+        ])
+
+    return [
+        make(),
+        make(transforms.RandomHorizontalFlip(p=1.0)),
+        make(transforms.RandomVerticalFlip(p=1.0)),
+        make(transforms.RandomRotation((90, 90))),
+        make(transforms.RandomRotation((180, 180))),
+        make(transforms.RandomRotation((270, 270))),
+        make(transforms.CenterCrop(crop_sz)),
+        make(transforms.RandomHorizontalFlip(p=1.0), transforms.CenterCrop(crop_sz)),
+    ]
+
+
+@torch.no_grad()
+def collect_predictions_tta(
+    model, split_root: str, device, image_size: int,
+    n: int, batch_size: int, num_workers: int
+):
+    """Average softmax probabilities over n TTA views per image."""
+    from torch.utils.data import DataLoader
+    from torchvision.datasets import ImageFolder
+
+    tta_tfms = build_tta_transforms(image_size)[:n]
+    model.eval()
+    all_probs: torch.Tensor | None = None
+    y_true: list[int] | None = None
+
+    for tfm in tta_tfms:
+        ds = ImageFolder(root=split_root, transform=tfm)
+        loader = DataLoader(
+            ds, batch_size=batch_size, shuffle=False,
+            num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+        )
+        probs_list, targets_list = [], []
+        for images, targets in loader:
+            logits = model(images.to(device))
+            probs_list.append(F.softmax(logits, dim=1).cpu())
+            targets_list.append(targets)
+        probs = torch.cat(probs_list, dim=0)
+        all_probs = probs if all_probs is None else all_probs + probs
+        if y_true is None:
+            y_true = torch.cat(targets_list).tolist()
+
+    y_pred = all_probs.argmax(dim=1).tolist()  # type: ignore[union-attr]
     return y_true, y_pred
 
 
@@ -134,7 +209,15 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
-    y_true, y_pred = collect_predictions(model, loader, device)
+    if args.tta:
+        print(f"Running TTA with {args.tta_n} views...")
+        y_true, y_pred = collect_predictions_tta(
+            model, dataset.root, device,
+            image_size=args.image_size, n=args.tta_n,
+            batch_size=args.batch_size, num_workers=args.num_workers,
+        )
+    else:
+        y_true, y_pred = collect_predictions(model, loader, device)
 
     acc = accuracy_score(y_true, y_pred)
     prec = precision_score(y_true, y_pred, average="macro", zero_division=0)

@@ -25,6 +25,30 @@ def get_train_transforms(image_size: int = 224) -> transforms.Compose:
     )
 
 
+def get_strong_train_transforms(image_size: int = 224) -> transforms.Compose:
+    """Stronger augmentation for joint/domain-robust training.
+
+    Adds RandomResizedCrop, perspective distortion, blur, and stronger
+    color jitter to simulate real-world field conditions.
+    """
+    return transforms.Compose(
+        [
+            transforms.RandomResizedCrop(image_size, scale=(0.6, 1.0)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.2),
+            transforms.RandomRotation(degrees=30),
+            transforms.RandomPerspective(distortion_scale=0.3, p=0.4),
+            transforms.ColorJitter(
+                brightness=0.3, contrast=0.3, saturation=0.3, hue=0.08
+            ),
+            transforms.RandomGrayscale(p=0.05),
+            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        ]
+    )
+
+
 def get_eval_transforms(image_size: int = 224) -> transforms.Compose:
     """Deterministic transforms for validation / PlantDoc evaluation (resize + ImageNet norm)."""
     return transforms.Compose(

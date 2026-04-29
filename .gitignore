@@ -1,7 +1,7 @@
 # Python / PyTorch CV project .gitignore
 
 # ---- datasets & artifacts ----
-data/
+/data/
 results/
 *.pt
 *.pth

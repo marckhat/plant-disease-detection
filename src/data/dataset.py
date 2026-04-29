@@ -183,6 +183,79 @@ def load_plantdoc_test(
     return ds, ref_classes
 
 
+def _make_imagefolder_subset(
+    split_root: Path,
+    transform,
+    ref_class_to_idx: dict[str, int],
+    location: str,
+) -> ImageFolder:
+    """Load ImageFolder whose classes are a subset of the reference; remap indices to global."""
+    if not split_root.is_dir():
+        raise FileNotFoundError(f"Missing split directory: {split_root}")
+
+    on_disk = _sorted_class_folder_names(split_root)
+    unknown = [c for c in on_disk if c not in ref_class_to_idx]
+    if unknown:
+        raise ValueError(f"{location}: class folders not in reference: {unknown}")
+
+    local_to_global = {i: ref_class_to_idx[c] for i, c in enumerate(sorted(on_disk))}
+    dataset = ImageFolder(
+        root=str(split_root),
+        transform=transform,
+        target_transform=lambda y, m=local_to_global: m[y],
+    )
+    return dataset
+
+
+def load_augmented_plantdoc_train(
+    aligned_root: Path | None = None,
+    *,
+    transform=None,
+    image_size: int = 224,
+) -> Tuple[ImageFolder, list[str]]:
+    """Augmented PlantDoc **train** split (27 classes, remapped to global indices)."""
+    root = default_aligned_root(aligned_root)
+    ref_classes, ref_idx = reference_classes_and_idx(root)
+    from .transforms import get_strong_train_transforms
+    tfm = transform if transform is not None else get_strong_train_transforms(image_size)
+    ds = _make_imagefolder_subset(
+        root / "augmented_plantdoc" / "train", tfm, ref_idx, "augmented_plantdoc/train"
+    )
+    return ds, ref_classes
+
+
+def load_augmented_plantdoc_val(
+    aligned_root: Path | None = None,
+    *,
+    transform=None,
+    image_size: int = 224,
+) -> Tuple[ImageFolder, list[str]]:
+    """Augmented PlantDoc **val** split (27 classes, remapped to global indices)."""
+    root = default_aligned_root(aligned_root)
+    ref_classes, ref_idx = reference_classes_and_idx(root)
+    tfm = transform if transform is not None else get_eval_transforms(image_size)
+    ds = _make_imagefolder_subset(
+        root / "augmented_plantdoc" / "val", tfm, ref_idx, "augmented_plantdoc/val"
+    )
+    return ds, ref_classes
+
+
+def load_augmented_plantdoc_test(
+    aligned_root: Path | None = None,
+    *,
+    transform=None,
+    image_size: int = 224,
+) -> Tuple[ImageFolder, list[str]]:
+    """Augmented PlantDoc **test** split (27 classes, remapped to global indices)."""
+    root = default_aligned_root(aligned_root)
+    ref_classes, ref_idx = reference_classes_and_idx(root)
+    tfm = transform if transform is not None else get_eval_transforms(image_size)
+    ds = _make_imagefolder_subset(
+        root / "augmented_plantdoc" / "test", tfm, ref_idx, "augmented_plantdoc/test"
+    )
+    return ds, ref_classes
+
+
 def load_all_datasets(
     aligned_root: Path | None = None,
     *,
@@ -209,6 +282,36 @@ def load_all_datasets(
         aligned_root, transform=eval_transform, image_size=image_size
     )
     return pv_train, pv_val, pd_train, pd_test, class_names
+
+
+def load_all_datasets_with_augmented(
+    aligned_root: Path | None = None,
+    *,
+    train_transform=None,
+    eval_transform=None,
+    image_size: int = 224,
+) -> Tuple[ImageFolder, ImageFolder, ImageFolder, ImageFolder, ImageFolder, list[str]]:
+    """
+    Load PlantVillage train/val, PlantDoc train/test, AND augmented_plantdoc train with one reference ``class_names``.
+
+    Returns: (pv_train, pv_val, pd_train, aug_train, pd_test, class_names)
+    """
+    pv_train, class_names = load_plantvillage_train(
+        aligned_root, transform=train_transform, image_size=image_size
+    )
+    pv_val, _ = load_plantvillage_val(
+        aligned_root, transform=eval_transform, image_size=image_size
+    )
+    pd_train, _ = load_plantdoc_train(
+        aligned_root, transform=eval_transform, image_size=image_size
+    )
+    aug_train, _ = load_augmented_plantdoc_train(
+        aligned_root, transform=train_transform, image_size=image_size
+    )
+    pd_test, _ = load_plantdoc_test(
+        aligned_root, transform=eval_transform, image_size=image_size
+    )
+    return pv_train, pv_val, pd_train, aug_train, pd_test, class_names
 
 
 def make_dataloader(
