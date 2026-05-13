@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plant Disease Detection</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:   #22c55e;
+      --green-d: #16a34a;
+      --bg:      #0f172a;
+      --card:    #1e293b;
+      --border:  #334155;
+      --text:    #f1f5f9;
+      --muted:   #94a3b8;
+      --red:     #ef4444;
+      --yellow:  #f59e0b;
+      --radius:  12px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #14532d 0%, #166534 50%, #15803d 100%);
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid #166534;
+    }
+    header .logo { font-size: 2rem; }
+    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
+    header p  { font-size: 0.85rem; color: #bbf7d0; margin-top: 2px; }
+    .badge {
+      margin-left: auto;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* ── Layout ── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Stat cards ── */
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-value { font-size: 2rem; font-weight: 700; color: var(--green); }
+    .stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+
+    /* ── Upload zone ── */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: var(--green);
+      background: rgba(34,197,94,0.05);
+    }
+    #drop-zone .icon { font-size: 3rem; margin-bottom: 12px; }
+    #drop-zone p   { color: var(--muted); font-size: 0.9rem; }
+    #drop-zone strong { color: var(--green); }
+    #file-input { display: none; }
+
+    #preview-wrap { margin-top: 20px; display: none; }
+    #preview-img  {
+      max-width: 100%;
+      max-height: 280px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+      margin: 0 auto;
+      object-fit: contain;
+    }
+
+    .btn {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+      width: 100%;
+      transition: background 0.2s;
+    }
+    .btn:hover  { background: var(--green-d); }
+    .btn:disabled { background: var(--border); cursor: not-allowed; }
+
+    /* ── Results ── */
+    #results-section { display: none; }
+
+    .top-prediction {
+      background: linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04));
+      border: 1px solid rgba(34,197,94,0.35);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .top-prediction .disease-name { font-size: 1.4rem; font-weight: 700; color: var(--green); }
+    .top-prediction .common-name  { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+    .top-prediction .confidence   { font-size: 1rem; font-weight: 600; margin-top: 8px; }
+
+    .severity-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-left: 8px;
+    }
+    .severity-none   { background: rgba(34,197,94,0.2);  color: #4ade80; }
+    .severity-medium { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .severity-high   { background: rgba(239,68,68,0.2);  color: #f87171; }
+    .severity-unknown{ background: rgba(148,163,184,0.2);color: var(--muted); }
+
+    .treatment-box {
+      background: rgba(255,255,255,0.04);
+      border-left: 3px solid var(--green);
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      margin-top: 12px;
+      line-height: 1.6;
+    }
+
+    /* ── Bar chart ── */
+    .prob-bar { margin-bottom: 10px; }
+    .prob-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+    }
+    .prob-bar-label .cls  { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75%; }
+    .prob-bar-label .pct  { color: var(--green); font-weight: 600; }
+    .prob-bar-track { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+    .prob-bar-fill  { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.6s ease; }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      border: 3px solid var(--border);
+      border-top: 3px solid var(--green);
+      border-radius: 50%;
+      width: 32px; height: 32px;
+      animation: spin 0.7s linear infinite;
+      margin: 16px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Chart ── */
+    .chart-wrap { position: relative; height: 220px; }
+    canvas { max-height: 100%; }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+      padding: 32px 24px;
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌿</div>
+  <div>
+    <h1>Plant Disease Detection</h1>
+    <p>ResNet50 · Transfer Learning · 27 disease classes</p>
+  </div>
+  <div class="badge" id="header-acc">Loading metrics…</div>
+</header>
+
+<div class="container">
+
+  <!-- Stat cards -->
+  <div class="grid-4" id="stat-cards">
+    <div class="stat-card"><div class="stat-value" id="s-acc">—</div><div class="stat-label">PlantDoc Test Accuracy</div></div>
+    <div class="stat-card"><div class="stat-value" id="s-f1">—</div><div class="stat-label">Macro F1-Score</div></div>
+    <div class="stat-card"><div class="stat-value" id="s-prec">—</div><div class="stat-label">Macro Precision</div></div>
+    <div class="stat-card"><div class="stat-value" id="s-rec">—</div><div class="stat-label">Macro Recall</div></div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="grid-2">
+
+    <!-- Left: upload + results -->
+    <div>
+      <div class="card">
+        <div class="card-title">Upload a leaf image</div>
+
+        <div id="drop-zone">
+          <div class="icon">📷</div>
+          <p>Drag & drop your leaf photo here<br>or <strong>click to browse</strong></p>
+          <p style="margin-top:8px;font-size:0.75rem;">JPG, PNG, WEBP · max 16 MB</p>
+          <input type="file" id="file-input" accept="image/*" />
+        </div>
+
+        <div id="preview-wrap">
+          <img id="preview-img" src="" alt="Preview" />
+        </div>
+
+        <button class="btn" id="predict-btn" disabled>Analyse Image</button>
+        <div id="spinner" style="display:none;"><div class="spinner"></div></div>
+      </div>
+
+      <!-- Results -->
+      <div id="results-section" style="margin-top:24px;">
+        <div class="card">
+          <div class="card-title">Diagnosis</div>
+          <div class="top-prediction" id="top-pred-box">
+            <div class="disease-name" id="r-disease">—</div>
+            <div class="common-name"  id="r-common">—</div>
+            <div class="confidence">
+              Confidence: <span id="r-conf" style="color:var(--green)">—</span>
+              <span class="severity-badge" id="r-severity"></span>
+            </div>
+            <div class="treatment-box" id="r-treatment"></div>
+          </div>
+
+          <div class="card-title" style="margin-top:16px;">Top 5 predictions</div>
+          <div id="prob-bars"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: charts -->
+    <div>
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-title">Training — Validation Accuracy</div>
+        <div class="chart-wrap"><canvas id="acc-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Training — Loss curves</div>
+        <div class="chart-wrap"><canvas id="loss-chart"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>Plant Disease Detection · ResNet50 · PlantVillage + augmented PlantDoc</footer>
+
+<script>
+// ── Metric cards ────────────────────────────────────────────────────────────
+async function loadMetrics() {
+  try {
+    const res  = await fetch('/api/metrics');
+    const data = await res.json();
+
+    if (data.eval) {
+      const e = data.eval;
+      document.getElementById('s-acc').textContent  = (e.accuracy * 100).toFixed(1) + '%';
+      document.getElementById('s-f1').textContent   = (e.f1_macro * 100).toFixed(1) + '%';
+      document.getElementById('s-prec').textContent = (e.precision_macro * 100).toFixed(1) + '%';
+      document.getElementById('s-rec').textContent  = (e.recall_macro * 100).toFixed(1) + '%';
+      document.getElementById('header-acc').textContent =
+        'Test accuracy: ' + (e.accuracy * 100).toFixed(1) + '%';
+    }
+
+    if (data.history) {
+      const h      = data.history;
+      const epochs = Array.from({length: h.epochs_run}, (_, i) => i + 1);
+      const chartDefaults = {
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.35,
+        fill: false,
+      };
+
+      new Chart(document.getElementById('acc-chart'), {
+        type: 'line',
+        data: {
+          labels: epochs,
+          datasets: [{
+            label: 'Val Accuracy',
+            data: h.val_accuracies.map(v => (v * 100).toFixed(2)),
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34,197,94,0.08)',
+            fill: true,
+            ...chartDefaults,
+          }]
+        },
+        options: chartOpts('Accuracy (%)', 100)
+      });
+
+      new Chart(document.getElementById('loss-chart'), {
+        type: 'line',
+        data: {
+          labels: epochs,
+          datasets: [
+            { label: 'Train Loss', data: h.train_losses, borderColor: '#60a5fa', ...chartDefaults },
+            { label: 'Val Loss',   data: h.val_losses,   borderColor: '#f87171', ...chartDefaults },
+          ]
+        },
+        options: chartOpts('Loss')
+      });
+    }
+  } catch(e) { console.error('Metrics error', e); }
+}
+
+function chartOpts(yLabel, yMax) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#94a3b8', font: { size: 11 } } }
+    },
+    scales: {
+      x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+      y: {
+        ticks: { color: '#64748b' }, grid: { color: '#334155' },
+        title: { display: true, text: yLabel, color: '#64748b', font: { size: 11 } },
+        max: yMax,
+      }
+    }
+  };
+}
+
+// ── Upload & predict ─────────────────────────────────────────────────────────
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+const previewWrap= document.getElementById('preview-wrap');
+const previewImg = document.getElementById('preview-img');
+const predictBtn = document.getElementById('predict-btn');
+const spinner    = document.getElementById('spinner');
+let selectedFile = null;
+
+dropZone.addEventListener('click',  () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave',  () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(file) {
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewWrap.style.display = 'block';
+  predictBtn.disabled = false;
+  document.getElementById('results-section').style.display = 'none';
+}
+
+predictBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  predictBtn.disabled = true;
+  spinner.style.display = 'block';
+  document.getElementById('results-section').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('image', selectedFile);
+
+  try {
+    const res  = await fetch('/api/predict', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    renderResults(data.predictions);
+  } catch(e) {
+    alert('Prediction failed. Is the server running?');
+  } finally {
+    spinner.style.display = 'none';
+    predictBtn.disabled = false;
+  }
+});
+
+function renderResults(preds) {
+  const top  = preds[0];
+  const info = top.info;
+
+  document.getElementById('r-disease').textContent  = top.label.replace(/__/g, ' › ').replace(/_/g, ' ');
+  document.getElementById('r-common').textContent   = info.common;
+  document.getElementById('r-conf').textContent     = (top.probability * 100).toFixed(1) + '%';
+  document.getElementById('r-treatment').textContent = '💊 ' + info.treatment;
+
+  const sev = document.getElementById('r-severity');
+  sev.textContent  = info.severity.toUpperCase();
+  sev.className    = 'severity-badge severity-' + info.severity;
+
+  const barsEl = document.getElementById('prob-bars');
+  barsEl.innerHTML = '';
+  preds.forEach(p => {
+    const pct = (p.probability * 100).toFixed(1);
+    const label = p.label.replace(/__/g, ' › ').replace(/_/g, ' ');
+    barsEl.innerHTML += `
+      <div class="prob-bar">
+        <div class="prob-bar-label">
+          <span class="cls">${label}</span>
+          <span class="pct">${pct}%</span>
+        </div>
+        <div class="prob-bar-track">
+          <div class="prob-bar-fill" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+  });
+
+  document.getElementById('results-section').style.display = 'block';
+}
+
+loadMetrics();
+</script>
+</body>
+</html>
