@@ -1,468 +1,951 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Plant Disease Detection</title>
+  <title>Verdis — Crop Disease Detection</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%233F6E47' d='M16 4c-7 0-12 5-12 12 0 6 5 12 12 12s12-6 12-12c0-7-5-12-12-12zm0 4c2 0 4 4 4 8s-2 8-4 8-4-4-4-8 2-8 4-8z'/%3E%3C/svg%3E"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            bg:        '#0A0E0C',
+            surface:   '#131815',
+            elevated:  '#1A211D',
+            border:    '#1F2622',
+            text:      '#F5F5F0',
+            muted:     '#8A938E',
+            brand:     '#3F6E47',
+            'brand-2': '#4F8F5F',
+            emerald:   '#10B981',
+            amber:     '#F59E0B',
+            red:       '#EF4444',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          letterSpacing: { tightest: '-0.04em', tight2: '-0.025em' },
+        }
+      }
+    };
+  </script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background:#0A0E0C; color:#F5F5F0; font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+    * { letter-spacing: -0.01em; }
+    .num { font-family:'JetBrains Mono', monospace; letter-spacing:0; }
+    .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.12em; font-weight:600; color:#8A938E; }
+    .scrollbar-thin::-webkit-scrollbar { width:8px; height:8px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background:transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background:#1F2622; border-radius:4px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover { background:#2A332D; }
 
-    :root {
-      --green:   #22c55e;
-      --green-d: #16a34a;
-      --bg:      #0f172a;
-      --card:    #1e293b;
-      --border:  #334155;
-      --text:    #f1f5f9;
-      --muted:   #94a3b8;
-      --red:     #ef4444;
-      --yellow:  #f59e0b;
-      --radius:  12px;
-    }
+    .nav-item { position:relative; }
+    .nav-item.active { background:rgba(63,110,71,0.12); color:#F5F5F0; }
+    .nav-item.active::before { content:''; position:absolute; left:0; top:8px; bottom:8px; width:2px; background:#4F8F5F; border-radius:2px; }
+    .nav-item.active .nav-icon { color:#4F8F5F; }
 
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
+    [data-view] { animation: fadeIn 240ms ease-out; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
 
-    /* ── Header ── */
-    header {
-      background: linear-gradient(135deg, #14532d 0%, #166534 50%, #15803d 100%);
-      padding: 24px 40px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      border-bottom: 1px solid #166534;
-    }
-    header .logo { font-size: 2rem; }
-    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
-    header p  { font-size: 0.85rem; color: #bbf7d0; margin-top: 2px; }
-    .badge {
-      margin-left: auto;
-      background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.3);
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      white-space: nowrap;
-    }
+    .conf-bar { transition: width 700ms cubic-bezier(.16,1,.3,1); }
+    .dropzone { transition: border-color 180ms, background 180ms; }
+    .dropzone.dragover { border-color:#4F8F5F !important; background:rgba(63,110,71,0.06) !important; }
 
-    /* ── Layout ── */
-    .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+    @keyframes shimmer { 0% { background-position:-1000px 0; } 100% { background-position:1000px 0; } }
+    .shimmer { background:linear-gradient(90deg, #131815 0%, #1A211D 50%, #131815 100%); background-size:1000px 100%; animation:shimmer 1.6s linear infinite; }
 
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .img-stack { position:relative; }
+    .img-stack > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transition:opacity 280ms ease; }
 
-    @media (max-width: 900px) {
-      .grid-2 { grid-template-columns: 1fr; }
-      .grid-4 { grid-template-columns: repeat(2, 1fr); }
-    }
+    .tabular { font-variant-numeric: tabular-nums; }
 
-    /* ── Cards ── */
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-    }
-    .card-title {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--muted);
-      margin-bottom: 16px;
-    }
-
-    /* ── Stat cards ── */
-    .stat-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      text-align: center;
-    }
-    .stat-value { font-size: 2rem; font-weight: 700; color: var(--green); }
-    .stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
-
-    /* ── Upload zone ── */
-    #drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 48px 24px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-      position: relative;
-    }
-    #drop-zone:hover, #drop-zone.drag-over {
-      border-color: var(--green);
-      background: rgba(34,197,94,0.05);
-    }
-    #drop-zone .icon { font-size: 3rem; margin-bottom: 12px; }
-    #drop-zone p   { color: var(--muted); font-size: 0.9rem; }
-    #drop-zone strong { color: var(--green); }
-    #file-input { display: none; }
-
-    #preview-wrap { margin-top: 20px; display: none; }
-    #preview-img  {
-      max-width: 100%;
-      max-height: 280px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      display: block;
-      margin: 0 auto;
-      object-fit: contain;
-    }
-
-    .btn {
-      display: inline-block;
-      background: var(--green);
-      color: #fff;
-      border: none;
-      padding: 12px 28px;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 16px;
-      width: 100%;
-      transition: background 0.2s;
-    }
-    .btn:hover  { background: var(--green-d); }
-    .btn:disabled { background: var(--border); cursor: not-allowed; }
-
-    /* ── Results ── */
-    #results-section { display: none; }
-
-    .top-prediction {
-      background: linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04));
-      border: 1px solid rgba(34,197,94,0.35);
-      border-radius: var(--radius);
-      padding: 20px;
-      margin-bottom: 20px;
-    }
-    .top-prediction .disease-name { font-size: 1.4rem; font-weight: 700; color: var(--green); }
-    .top-prediction .common-name  { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
-    .top-prediction .confidence   { font-size: 1rem; font-weight: 600; margin-top: 8px; }
-
-    .severity-badge {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 20px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-left: 8px;
-    }
-    .severity-none   { background: rgba(34,197,94,0.2);  color: #4ade80; }
-    .severity-medium { background: rgba(245,158,11,0.2); color: #fbbf24; }
-    .severity-high   { background: rgba(239,68,68,0.2);  color: #f87171; }
-    .severity-unknown{ background: rgba(148,163,184,0.2);color: var(--muted); }
-
-    .treatment-box {
-      background: rgba(255,255,255,0.04);
-      border-left: 3px solid var(--green);
-      border-radius: 0 8px 8px 0;
-      padding: 12px 16px;
-      font-size: 0.88rem;
-      color: #cbd5e1;
-      margin-top: 12px;
-      line-height: 1.6;
-    }
-
-    /* ── Bar chart ── */
-    .prob-bar { margin-bottom: 10px; }
-    .prob-bar-label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.78rem;
-      margin-bottom: 4px;
-    }
-    .prob-bar-label .cls  { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75%; }
-    .prob-bar-label .pct  { color: var(--green); font-weight: 600; }
-    .prob-bar-track { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
-    .prob-bar-fill  { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.6s ease; }
-
-    /* ── Loading spinner ── */
-    .spinner {
-      border: 3px solid var(--border);
-      border-top: 3px solid var(--green);
-      border-radius: 50%;
-      width: 32px; height: 32px;
-      animation: spin 0.7s linear infinite;
-      margin: 16px auto;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Chart ── */
-    .chart-wrap { position: relative; height: 220px; }
-    canvas { max-height: 100%; }
-
-    .section-title {
-      font-size: 1.1rem;
-      font-weight: 700;
-      margin-bottom: 20px;
-      color: var(--text);
-    }
-
-    footer {
-      text-align: center;
-      color: var(--muted);
-      font-size: 0.78rem;
-      padding: 32px 24px;
-      border-top: 1px solid var(--border);
-      margin-top: 40px;
-    }
+    .layer-btn.active, .xai-btn.active { background:#1A211D; color:#F5F5F0; }
+    .eval-btn.active { background:#3F6E47; color:#F5F5F0; }
   </style>
 </head>
-<body>
+<body class="bg-bg text-text">
 
-<header>
-  <div class="logo">🌿</div>
-  <div>
-    <h1>Plant Disease Detection</h1>
-    <p>ResNet50 · Transfer Learning · 27 disease classes</p>
-  </div>
-  <div class="badge" id="header-acc">Loading metrics…</div>
-</header>
+<div class="flex h-screen overflow-hidden">
 
-<div class="container">
+  <!-- ───────── SIDEBAR ───────── -->
+  <aside class="w-60 shrink-0 bg-surface border-r border-border flex flex-col">
 
-  <!-- Stat cards -->
-  <div class="grid-4" id="stat-cards">
-    <div class="stat-card"><div class="stat-value" id="s-acc">—</div><div class="stat-label">PlantDoc Test Accuracy</div></div>
-    <div class="stat-card"><div class="stat-value" id="s-f1">—</div><div class="stat-label">Macro F1-Score</div></div>
-    <div class="stat-card"><div class="stat-value" id="s-prec">—</div><div class="stat-label">Macro Precision</div></div>
-    <div class="stat-card"><div class="stat-value" id="s-rec">—</div><div class="stat-label">Macro Recall</div></div>
-  </div>
-
-  <!-- Main grid -->
-  <div class="grid-2">
-
-    <!-- Left: upload + results -->
-    <div>
-      <div class="card">
-        <div class="card-title">Upload a leaf image</div>
-
-        <div id="drop-zone">
-          <div class="icon">📷</div>
-          <p>Drag & drop your leaf photo here<br>or <strong>click to browse</strong></p>
-          <p style="margin-top:8px;font-size:0.75rem;">JPG, PNG, WEBP · max 16 MB</p>
-          <input type="file" id="file-input" accept="image/*" />
-        </div>
-
-        <div id="preview-wrap">
-          <img id="preview-img" src="" alt="Preview" />
-        </div>
-
-        <button class="btn" id="predict-btn" disabled>Analyse Image</button>
-        <div id="spinner" style="display:none;"><div class="spinner"></div></div>
+    <div class="px-5 pt-6 pb-7 flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-brand/15 border border-brand/30 flex items-center justify-center">
+        <svg viewBox="0 0 32 32" class="w-4 h-4"><path fill="#4F8F5F" d="M16 4c-7 0-12 5-12 12 0 6 5 12 12 12s12-6 12-12c0-7-5-12-12-12zm0 4c2 0 4 4 4 8s-2 8-4 8-4-4-4-8 2-8 4-8z"/></svg>
       </div>
+      <div>
+        <div class="text-[15px] font-semibold tracking-tight2">Verdis</div>
+        <div class="text-[11px] text-muted -mt-0.5">Agri-AI · v0.9</div>
+      </div>
+    </div>
 
-      <!-- Results -->
-      <div id="results-section" style="margin-top:24px;">
-        <div class="card">
-          <div class="card-title">Diagnosis</div>
-          <div class="top-prediction" id="top-pred-box">
-            <div class="disease-name" id="r-disease">—</div>
-            <div class="common-name"  id="r-common">—</div>
-            <div class="confidence">
-              Confidence: <span id="r-conf" style="color:var(--green)">—</span>
-              <span class="severity-badge" id="r-severity"></span>
+    <nav class="px-2.5 flex-1 space-y-0.5">
+      <div class="px-3 pb-2 eyebrow">Workspace</div>
+      <button data-nav="diagnose" class="nav-item active w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13.5px] text-muted hover:text-text transition-colors">
+        <i data-lucide="scan-line" class="nav-icon w-[18px] h-[18px] text-muted"></i><span>Diagnose</span>
+      </button>
+      <button data-nav="xai" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13.5px] text-muted hover:text-text transition-colors">
+        <i data-lucide="aperture" class="nav-icon w-[18px] h-[18px] text-muted"></i><span>Explainability</span>
+      </button>
+
+      <div class="px-3 pt-5 pb-2 eyebrow">Research</div>
+      <button data-nav="compare" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13.5px] text-muted hover:text-text transition-colors">
+        <i data-lucide="git-compare-arrows" class="nav-icon w-[18px] h-[18px] text-muted"></i><span>Model comparison</span>
+      </button>
+      <button data-nav="eval" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13.5px] text-muted hover:text-text transition-colors">
+        <i data-lucide="bar-chart-3" class="nav-icon w-[18px] h-[18px] text-muted"></i><span>Evaluation</span>
+      </button>
+      <button data-nav="domain" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13.5px] text-muted hover:text-text transition-colors">
+        <i data-lucide="layers" class="nav-icon w-[18px] h-[18px] text-muted"></i><span>Domain study</span>
+      </button>
+
+      <div class="px-3 pt-5 pb-2 eyebrow">Info</div>
+      <button data-nav="about" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13.5px] text-muted hover:text-text transition-colors">
+        <i data-lucide="info" class="nav-icon w-[18px] h-[18px] text-muted"></i><span>About & limits</span>
+      </button>
+    </nav>
+
+    <div class="px-3 py-3 border-t border-border space-y-2">
+      <div class="flex items-center gap-2 px-2 py-1.5 rounded-md">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald shadow-[0_0_8px_#10B981]"></span>
+        <span class="text-[12px] text-muted">All systems operational</span>
+      </div>
+      <div class="flex items-center gap-2.5 px-2 py-1.5">
+        <div class="w-7 h-7 rounded-full bg-elevated border border-border flex items-center justify-center text-[11px] font-medium">MK</div>
+        <div class="text-[12px]">
+          <div class="leading-tight">Final-year project</div>
+          <div class="text-muted leading-tight">2026</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───────── MAIN ───────── -->
+  <main class="flex-1 flex flex-col min-w-0">
+
+    <header class="h-16 px-8 border-b border-border flex items-center justify-between bg-bg/80 backdrop-blur sticky top-0 z-20">
+      <div>
+        <div id="topTitle" class="text-[15px] font-semibold tracking-tight2">Diagnose</div>
+        <div id="topSub" class="text-[12px] text-muted -mt-0.5">Upload a leaf — get a diagnosis, confidence score, and treatment plan.</div>
+      </div>
+      <div class="flex items-center gap-2.5">
+        <div class="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-surface text-[12px] text-muted">
+          <i data-lucide="cpu" class="w-3.5 h-3.5"></i><span>ResNet50 · CPU</span>
+        </div>
+        <div class="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-surface text-[12px] text-muted tabular">
+          <i data-lucide="database" class="w-3.5 h-3.5"></i><span>27 classes · 41,039 images</span>
+        </div>
+        <a href="https://github.com/marckhat/plant-disease-detection" target="_blank" class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-[12px] hover:bg-surface transition-colors">
+          <i data-lucide="github" class="w-3.5 h-3.5"></i><span>GitHub</span>
+        </a>
+      </div>
+    </header>
+
+    <section class="flex-1 overflow-y-auto scrollbar-thin">
+
+      <!-- ─────── DIAGNOSE VIEW ─────── -->
+      <div data-view="diagnose" class="p-8 max-w-[1400px] mx-auto">
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+          <div class="bg-surface border border-border rounded-xl p-4">
+            <div class="eyebrow">Test accuracy</div>
+            <div class="num text-2xl mt-1 tabular text-emerald">75.40%</div>
+            <div class="text-[11px] text-muted mt-0.5">PlantDoc · TTA</div>
+          </div>
+          <div class="bg-surface border border-border rounded-xl p-4">
+            <div class="eyebrow">F1 (macro)</div>
+            <div class="num text-2xl mt-1 tabular">0.746</div>
+            <div class="text-[11px] text-muted mt-0.5">27 classes</div>
+          </div>
+          <div class="bg-surface border border-border rounded-xl p-4">
+            <div class="eyebrow">Real-world tests</div>
+            <div class="num text-2xl mt-1 tabular">252</div>
+            <div class="text-[11px] text-muted mt-0.5">Field photos</div>
+          </div>
+          <div class="bg-surface border border-border rounded-xl p-4">
+            <div class="eyebrow">Inference</div>
+            <div class="num text-2xl mt-1 tabular">~1.4s</div>
+            <div class="text-[11px] text-muted mt-0.5">on CPU</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-5">
+
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <div class="text-[15px] font-semibold tracking-tight2">Image input</div>
+                <div class="text-[12px] text-muted">Drop a leaf photo, or pick a sample below.</div>
+              </div>
+              <div id="viewToggle" class="hidden items-center gap-0.5 bg-elevated border border-border rounded-lg p-0.5">
+                <button data-layer="original" class="layer-btn active px-2.5 py-1 text-[12px] rounded-md">Original</button>
+                <button data-layer="gradcam"  class="layer-btn px-2.5 py-1 text-[12px] rounded-md text-muted">Grad-CAM</button>
+              </div>
             </div>
-            <div class="treatment-box" id="r-treatment"></div>
+
+            <div id="dropzone" class="dropzone relative aspect-square w-full rounded-xl border-2 border-dashed border-border bg-elevated/40 overflow-hidden cursor-pointer group">
+              <input type="file" id="fileInput" accept="image/*" class="hidden">
+              <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
+                <div class="w-14 h-14 rounded-2xl border border-border bg-surface flex items-center justify-center mb-3 group-hover:border-brand/50 transition-colors">
+                  <i data-lucide="image-up" class="w-6 h-6 text-muted group-hover:text-brand-2 transition-colors"></i>
+                </div>
+                <div class="text-[14px] font-medium">Drop a leaf photo</div>
+                <div class="text-[12px] text-muted mt-1">PNG or JPG · up to 16 MB</div>
+                <div class="text-[11px] text-muted/60 mt-4">or click anywhere to browse</div>
+              </div>
+
+              <div id="imgStack" class="img-stack hidden w-full h-full">
+                <img id="origImg" alt="Original" />
+                <img id="camImg"  alt="Grad-CAM" style="opacity:0" />
+              </div>
+
+              <button id="clearBtn" class="hidden absolute top-3 right-3 w-8 h-8 rounded-md bg-bg/70 border border-border backdrop-blur hover:bg-elevated flex items-center justify-center">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+            <div class="mt-5">
+              <div class="flex items-center justify-between mb-2.5">
+                <div class="eyebrow">Try a sample</div>
+                <div class="text-[11px] text-muted">5 real PlantDoc test images</div>
+              </div>
+              <div id="sampleGrid" class="grid grid-cols-5 gap-2"></div>
+            </div>
           </div>
 
-          <div class="card-title" style="margin-top:16px;">Top 5 predictions</div>
-          <div id="prob-bars"></div>
+          <div class="bg-surface border border-border rounded-2xl p-5 min-h-[520px] flex flex-col">
+
+            <div id="resultEmpty" class="flex-1 flex flex-col items-center justify-center text-center px-8">
+              <div class="w-14 h-14 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-4">
+                <i data-lucide="stethoscope" class="w-6 h-6 text-muted"></i>
+              </div>
+              <div class="text-[14px] font-medium">No diagnosis yet</div>
+              <div class="text-[12px] text-muted mt-1 max-w-xs">Upload an image or pick a sample. The model returns its top-5 predictions, severity, and a treatment recommendation.</div>
+            </div>
+
+            <div id="resultLoading" class="hidden flex-1 flex-col space-y-3 p-1">
+              <div class="shimmer h-5 w-2/3 rounded"></div>
+              <div class="shimmer h-3 w-1/3 rounded"></div>
+              <div class="shimmer h-2 w-full rounded mt-4"></div>
+              <div class="shimmer h-24 w-full rounded mt-2"></div>
+              <div class="shimmer h-3 w-full rounded mt-3"></div>
+              <div class="shimmer h-3 w-5/6 rounded"></div>
+              <div class="shimmer h-3 w-4/6 rounded"></div>
+            </div>
+
+            <div id="resultPanel" class="hidden flex-1 flex-col">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0 flex-1">
+                  <div class="eyebrow">Diagnosis</div>
+                  <div id="diagTitle" class="mt-1 text-2xl font-semibold tracking-tight2 leading-tight"></div>
+                  <div id="diagCommon" class="text-[13px] text-muted mt-0.5"></div>
+                </div>
+                <span id="sevBadge" class="px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider shrink-0"></span>
+              </div>
+
+              <div class="mt-5">
+                <div class="flex items-center justify-between text-[12px] text-muted mb-1.5">
+                  <span>Confidence</span>
+                  <span id="confText" class="num tabular text-text font-medium"></span>
+                </div>
+                <div class="w-full h-1.5 bg-elevated rounded-full overflow-hidden">
+                  <div id="confBar" class="conf-bar h-full bg-emerald rounded-full" style="width:0%"></div>
+                </div>
+                <div id="confHint" class="text-[11px] text-muted mt-1.5"></div>
+              </div>
+
+              <div class="mt-5">
+                <div class="eyebrow mb-2.5">Top 5 predictions</div>
+                <div id="top5" class="space-y-2"></div>
+              </div>
+
+              <div id="treatmentCard" class="mt-5 p-4 rounded-xl bg-elevated/60 border border-border">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <i data-lucide="pill" class="w-3.5 h-3.5 text-brand-2"></i>
+                  <div class="eyebrow !text-brand-2">Treatment</div>
+                </div>
+                <div id="treatmentText" class="text-[13px] leading-relaxed text-text/90"></div>
+              </div>
+
+              <button id="explainBtn" class="mt-4 w-full px-3 py-2.5 rounded-lg bg-elevated hover:bg-[#222b25] border border-border flex items-center justify-center gap-2 text-[13px] transition-colors">
+                <i data-lucide="aperture" class="w-4 h-4 text-brand-2"></i>
+                <span>Show Grad-CAM explanation</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Right: charts -->
-    <div>
-      <div class="card" style="margin-bottom:24px;">
-        <div class="card-title">Training — Validation Accuracy</div>
-        <div class="chart-wrap"><canvas id="acc-chart"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Training — Loss curves</div>
-        <div class="chart-wrap"><canvas id="loss-chart"></canvas></div>
-      </div>
-    </div>
+      <!-- ─────── EXPLAINABILITY VIEW ─────── -->
+      <div data-view="xai" hidden class="p-8 max-w-[1400px] mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-  </div>
+          <div class="lg:col-span-2 bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <div class="text-[15px] font-semibold tracking-tight2">Grad-CAM explanation</div>
+                <div class="text-[12px] text-muted">Visual attention map for the current prediction.</div>
+              </div>
+              <div id="xaiToggle" class="flex items-center gap-0.5 bg-elevated border border-border rounded-lg p-0.5">
+                <button data-xai="original" class="xai-btn active px-2.5 py-1 text-[12px] rounded-md">Original</button>
+                <button data-xai="gradcam"  class="xai-btn px-2.5 py-1 text-[12px] rounded-md text-muted">Grad-CAM</button>
+                <button data-xai="split"    class="xai-btn px-2.5 py-1 text-[12px] rounded-md text-muted">Split</button>
+              </div>
+            </div>
+
+            <div id="xaiCanvas" class="aspect-square w-full rounded-xl bg-elevated/40 border border-border overflow-hidden relative">
+              <div id="xaiEmpty" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+                <div class="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center mb-3">
+                  <i data-lucide="aperture" class="w-6 h-6 text-muted"></i>
+                </div>
+                <div class="text-[14px] font-medium">Run a diagnosis first</div>
+                <div class="text-[12px] text-muted mt-1 max-w-sm">Switch to <span class="text-text">Diagnose</span>, upload or pick a sample, and the Grad-CAM heatmap will appear here.</div>
+                <button data-nav-to="diagnose" class="mt-4 px-3 py-1.5 rounded-md bg-emerald text-bg text-[12px] font-medium hover:bg-emerald/90 transition-colors">Go to Diagnose →</button>
+              </div>
+              <div id="xaiStack" class="img-stack w-full h-full hidden">
+                <img id="xaiOrig" />
+                <img id="xaiCam" style="opacity:0" />
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-5">
+            <div class="bg-surface border border-border rounded-2xl p-5">
+              <div class="eyebrow">What is Grad-CAM?</div>
+              <p class="text-[13px] leading-relaxed mt-2 text-text/90">
+                Gradient-weighted Class Activation Mapping highlights the spatial regions in the input image
+                that most influenced the model's prediction. Warm colors indicate high relevance.
+              </p>
+            </div>
+            <div class="bg-surface border border-border rounded-2xl p-5">
+              <div class="eyebrow">Reading the map</div>
+              <div class="mt-3 space-y-2.5">
+                <div class="flex items-start gap-2.5">
+                  <span class="mt-1 w-3 h-3 rounded-sm" style="background:linear-gradient(90deg,#FFE9B5,#F59E0B)"></span>
+                  <div class="text-[12.5px]"><b>Bright regions</b><div class="text-muted">Lesions, spots, or visual cues the model used.</div></div>
+                </div>
+                <div class="flex items-start gap-2.5">
+                  <span class="mt-1 w-3 h-3 rounded-sm bg-elevated border border-border"></span>
+                  <div class="text-[12.5px]"><b>Dark regions</b><div class="text-muted">Areas the model effectively ignored.</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="bg-surface border border-border rounded-2xl p-5">
+              <div class="eyebrow">Why it matters</div>
+              <p class="text-[13px] leading-relaxed mt-2 text-text/90">
+                A correct prediction backed by a heatmap that focuses on the lesion is trustworthy.
+                A correct prediction with a heatmap focused on the background is a warning sign.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─────── MODEL COMPARISON VIEW ─────── -->
+      <div data-view="compare" hidden class="p-8 max-w-[1400px] mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="eyebrow">Model A</div>
+                <div class="text-[18px] font-semibold mt-1 tracking-tight2">ResNet50</div>
+                <div class="text-[12px] text-muted">25M parameters · trained on PV + PD + augmented PD</div>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-emerald/15 text-emerald border border-emerald/30">Production</span>
+            </div>
+            <div id="resnetCard" class="grid grid-cols-2 gap-3 mt-4"></div>
+          </div>
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="eyebrow">Model B</div>
+                <div class="text-[18px] font-semibold mt-1 tracking-tight2">EfficientNet-B0</div>
+                <div class="text-[12px] text-muted">5M parameters · trained on PV + PD (no augmented)</div>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-amber/15 text-amber border border-amber/30">Baseline</span>
+            </div>
+            <div id="effnetCard" class="grid grid-cols-2 gap-3 mt-4"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-5">
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="text-[15px] font-semibold tracking-tight2">Metric comparison</div>
+                <div class="text-[12px] text-muted">PlantDoc real-world test set · TTA · 252 images</div>
+              </div>
+            </div>
+            <div class="h-72"><canvas id="cmpChart"></canvas></div>
+          </div>
+
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="eyebrow mb-2">Honest takeaway</div>
+            <p class="text-[13.5px] leading-relaxed text-text/90">
+              When trained on the same data subset (PlantVillage + PlantDoc, no augmented), the two architectures
+              perform within ~1 percentage point of each other:
+            </p>
+            <div class="mt-3 grid grid-cols-2 gap-3">
+              <div class="p-3 rounded-lg border border-border bg-elevated/40">
+                <div class="eyebrow">ResNet50 · joint</div>
+                <div class="num text-xl tabular mt-1">58.33%</div>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-elevated/40">
+                <div class="eyebrow">EfficientNet · joint</div>
+                <div class="num text-xl tabular mt-1">57.14%</div>
+              </div>
+            </div>
+            <p class="text-[12.5px] leading-relaxed text-muted mt-3">
+              The 18-point gap above is driven by the additional augmented PlantDoc training data
+              used for ResNet50 — <span class="text-text">data strategy outweighs architectural choice</span> for this domain-shift problem.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-5 bg-surface border border-border rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="text-[15px] font-semibold tracking-tight2">Per-class F1 score</div>
+              <div class="text-[12px] text-muted">Sorted by ResNet50 F1, descending. Hover for details.</div>
+            </div>
+          </div>
+          <div class="h-[420px]"><canvas id="perClassChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ─────── EVALUATION VIEW ─────── -->
+      <div data-view="eval" hidden class="p-8 max-w-[1400px] mx-auto">
+        <div class="flex items-center justify-between mb-5">
+          <div>
+            <div class="text-[15px] font-semibold tracking-tight2">Evaluation dashboard</div>
+            <div class="text-[12px] text-muted">PlantDoc test set · Test-Time Augmentation (8 views)</div>
+          </div>
+          <div class="flex items-center gap-0.5 bg-surface border border-border rounded-lg p-0.5">
+            <button data-eval="resnet50" class="eval-btn active px-3 py-1.5 text-[12.5px] rounded-md">ResNet50</button>
+            <button data-eval="efficientnet_b0" class="eval-btn px-3 py-1.5 text-[12.5px] rounded-md text-muted">EfficientNet-B0</button>
+          </div>
+        </div>
+
+        <div id="evalStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5">
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="text-[15px] font-semibold tracking-tight2">Confusion matrix</div>
+                <div class="text-[12px] text-muted">Rows = true class, columns = predicted class. Brighter = more samples.</div>
+              </div>
+            </div>
+            <div class="bg-white rounded-lg overflow-hidden p-2">
+              <img id="cmImg" alt="Confusion matrix" class="w-full h-auto block" />
+            </div>
+          </div>
+
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="text-[15px] font-semibold tracking-tight2">Per-class F1</div>
+                <div class="text-[12px] text-muted">Strongest at top, weakest at bottom.</div>
+              </div>
+            </div>
+            <div id="evalPerClass" class="space-y-1.5 max-h-[420px] overflow-y-auto scrollbar-thin pr-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─────── DOMAIN STUDY VIEW ─────── -->
+      <div data-view="domain" hidden class="p-8 max-w-[1400px] mx-auto">
+        <div class="bg-surface border border-border rounded-2xl p-5 mb-5">
+          <div class="text-[15px] font-semibold tracking-tight2">Why fine-tuning on PlantDoc matters</div>
+          <p class="text-[13.5px] text-text/90 leading-relaxed mt-2 max-w-3xl">
+            PlantVillage images are taken in controlled lab conditions — flat backgrounds, perfect lighting.
+            A model trained only on PlantVillage looks great on PlantVillage's own test set but fails on real
+            field photos. Fine-tuning on PlantDoc bridges that <i>domain gap</i>.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="eyebrow">PlantVillage val accuracy</div>
+            <div class="num text-3xl mt-1 tabular text-emerald">99.59%</div>
+            <div class="text-[12px] text-muted mt-1">Lab-condition photos · misleadingly high.</div>
+          </div>
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="eyebrow">PlantDoc (PV-only model)</div>
+            <div class="num text-3xl mt-1 tabular text-red">~30%</div>
+            <div class="text-[12px] text-muted mt-1">Real field photos · model collapses.</div>
+          </div>
+          <div class="bg-surface border border-border rounded-2xl p-5 ring-1 ring-brand/30">
+            <div class="eyebrow text-brand-2">PlantDoc (joint_all)</div>
+            <div class="num text-3xl mt-1 tabular text-emerald">75.40%</div>
+            <div class="text-[12px] text-muted mt-1">Fine-tuned on PD + augmented PD · deployable.</div>
+          </div>
+        </div>
+
+        <div class="bg-surface border border-border rounded-2xl p-5">
+          <div class="text-[15px] font-semibold tracking-tight2 mb-2">Training pipeline</div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+            <div class="p-4 rounded-xl bg-elevated/40 border border-border">
+              <div class="num text-[11px] text-brand-2">01</div>
+              <div class="text-[13.5px] font-semibold mt-1">Pretrain ImageNet</div>
+              <div class="text-[12px] text-muted mt-1">Backbone weights from torchvision.</div>
+            </div>
+            <div class="p-4 rounded-xl bg-elevated/40 border border-border">
+              <div class="num text-[11px] text-brand-2">02</div>
+              <div class="text-[13.5px] font-semibold mt-1">Train on PlantVillage</div>
+              <div class="text-[12px] text-muted mt-1">39,000 lab images · 27 classes.</div>
+            </div>
+            <div class="p-4 rounded-xl bg-elevated/40 border border-border">
+              <div class="num text-[11px] text-brand-2">03</div>
+              <div class="text-[13.5px] font-semibold mt-1">Fine-tune joint_aug</div>
+              <div class="text-[12px] text-muted mt-1">+ PlantDoc · + augmented PlantDoc.</div>
+            </div>
+            <div class="p-4 rounded-xl bg-elevated/40 border border-border ring-1 ring-brand/30">
+              <div class="num text-[11px] text-brand-2">04</div>
+              <div class="text-[13.5px] font-semibold mt-1">Fine-tune joint_all</div>
+              <div class="text-[12px] text-muted mt-1">Focal Loss · CutMix · frozen→unfrozen.</div>
+            </div>
+          </div>
+          <div class="mt-4 p-3 rounded-lg bg-emerald/5 border border-emerald/20 text-[12.5px] text-text/90">
+            <b class="text-emerald">+45 percentage points</b> on real-world test accuracy from step 02 to step 04.
+            The augmented PlantDoc data alone accounts for ~15 points of that.
+          </div>
+        </div>
+      </div>
+
+      <!-- ─────── ABOUT VIEW ─────── -->
+      <div data-view="about" hidden class="p-8 max-w-[1400px] mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <i data-lucide="alert-triangle" class="w-4 h-4 text-amber"></i>
+              <div class="eyebrow !text-amber">Hard classes</div>
+            </div>
+            <div class="text-[13.5px] leading-relaxed">
+              Corn Gray Leaf Spot, Potato Early/Late Blight, and Tomato Bacterial Spot are visually similar
+              to neighbouring classes and have F1 below 0.45.
+            </div>
+          </div>
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <i data-lucide="globe" class="w-4 h-4 text-amber"></i>
+              <div class="eyebrow !text-amber">Out-of-distribution</div>
+            </div>
+            <div class="text-[13.5px] leading-relaxed">
+              Diseases outside the 27-class taxonomy will be silently misclassified into the nearest visible class.
+              The model does not return an "unknown" option.
+            </div>
+          </div>
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <i data-lucide="image-off" class="w-4 h-4 text-amber"></i>
+              <div class="eyebrow !text-amber">Edge cases</div>
+            </div>
+            <div class="text-[13.5px] leading-relaxed">
+              Extreme lighting, heavy motion blur, occluded leaves, and multi-leaf photographs degrade accuracy.
+              Confidence below ~50% should be treated as inconclusive.
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="text-[15px] font-semibold tracking-tight2">Tech stack</div>
+            <div class="grid grid-cols-2 gap-3 mt-3 text-[13px]">
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Backbone</div><div class="mt-0.5">ResNet50 · ImageNet pretrained</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Framework</div><div class="mt-0.5">PyTorch 2.6 · CUDA 12.4</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Datasets</div><div class="mt-0.5">PlantVillage · PlantDoc</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Loss</div><div class="mt-0.5">Focal (γ=2) · weighted</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Augmentation</div><div class="mt-0.5">CutMix · perspective · color jitter</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Inference</div><div class="mt-0.5">8-view TTA · CPU / GPU</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Web</div><div class="mt-0.5">Flask · Tailwind · Chart.js</div></div>
+              <div><div class="text-muted text-[11.5px] uppercase tracking-wider">Explainability</div><div class="mt-0.5">Grad-CAM (final conv block)</div></div>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-border rounded-2xl p-5">
+            <div class="text-[15px] font-semibold tracking-tight2">Credits</div>
+            <div class="mt-3 space-y-3 text-[13px]">
+              <div>
+                <div class="text-muted text-[11.5px] uppercase tracking-wider">Datasets</div>
+                <div class="mt-1">PlantVillage (Mohanty et al.) · PlantDoc (Singh et al.)</div>
+              </div>
+              <div>
+                <div class="text-muted text-[11.5px] uppercase tracking-wider">Author</div>
+                <div class="mt-1">Final-year computer-vision project · 2026</div>
+              </div>
+              <div class="pt-3 border-t border-border">
+                <div class="text-muted text-[11.5px] uppercase tracking-wider mb-1">API example</div>
+                <pre class="font-mono text-[11px] text-text/80 bg-elevated/60 border border-border rounded-lg p-3 overflow-x-auto">curl -X POST http://localhost:5000/api/predict \
+  -F "image=@leaf.jpg"</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
 </div>
 
-<footer>Plant Disease Detection · ResNet50 · PlantVillage + augmented PlantDoc</footer>
-
 <script>
-// ── Metric cards ────────────────────────────────────────────────────────────
-async function loadMetrics() {
-  try {
-    const res  = await fetch('/api/metrics');
-    const data = await res.json();
+(() => {
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const pct = (v) => (v * 100).toFixed(1) + '%';
 
-    if (data.eval) {
-      const e = data.eval;
-      document.getElementById('s-acc').textContent  = (e.accuracy * 100).toFixed(1) + '%';
-      document.getElementById('s-f1').textContent   = (e.f1_macro * 100).toFixed(1) + '%';
-      document.getElementById('s-prec').textContent = (e.precision_macro * 100).toFixed(1) + '%';
-      document.getElementById('s-rec').textContent  = (e.recall_macro * 100).toFixed(1) + '%';
-      document.getElementById('header-acc').textContent =
-        'Test accuracy: ' + (e.accuracy * 100).toFixed(1) + '%';
-    }
-
-    if (data.history) {
-      const h      = data.history;
-      const epochs = Array.from({length: h.epochs_run}, (_, i) => i + 1);
-      const chartDefaults = {
-        borderWidth: 2,
-        pointRadius: 3,
-        tension: 0.35,
-        fill: false,
-      };
-
-      new Chart(document.getElementById('acc-chart'), {
-        type: 'line',
-        data: {
-          labels: epochs,
-          datasets: [{
-            label: 'Val Accuracy',
-            data: h.val_accuracies.map(v => (v * 100).toFixed(2)),
-            borderColor: '#22c55e',
-            backgroundColor: 'rgba(34,197,94,0.08)',
-            fill: true,
-            ...chartDefaults,
-          }]
-        },
-        options: chartOpts('Accuracy (%)', 100)
-      });
-
-      new Chart(document.getElementById('loss-chart'), {
-        type: 'line',
-        data: {
-          labels: epochs,
-          datasets: [
-            { label: 'Train Loss', data: h.train_losses, borderColor: '#60a5fa', ...chartDefaults },
-            { label: 'Val Loss',   data: h.val_losses,   borderColor: '#f87171', ...chartDefaults },
-          ]
-        },
-        options: chartOpts('Loss')
-      });
-    }
-  } catch(e) { console.error('Metrics error', e); }
-}
-
-function chartOpts(yLabel, yMax) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { labels: { color: '#94a3b8', font: { size: 11 } } }
-    },
-    scales: {
-      x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
-      y: {
-        ticks: { color: '#64748b' }, grid: { color: '#334155' },
-        title: { display: true, text: yLabel, color: '#64748b', font: { size: 11 } },
-        max: yMax,
-      }
-    }
+  const SEV = {
+    none:   { label: 'Healthy', cls: 'bg-emerald/15 text-emerald border border-emerald/30' },
+    medium: { label: 'Medium',  cls: 'bg-amber/15 text-amber border border-amber/30' },
+    high:   { label: 'High',    cls: 'bg-red/15 text-red border border-red/30' },
   };
-}
 
-// ── Upload & predict ─────────────────────────────────────────────────────────
-const dropZone   = document.getElementById('drop-zone');
-const fileInput  = document.getElementById('file-input');
-const previewWrap= document.getElementById('preview-wrap');
-const previewImg = document.getElementById('preview-img');
-const predictBtn = document.getElementById('predict-btn');
-const spinner    = document.getElementById('spinner');
-let selectedFile = null;
+  const TITLES = {
+    diagnose: { t: 'Diagnose',          s: 'Upload a leaf — get a diagnosis, confidence score, and treatment plan.' },
+    xai:      { t: 'Explainability',    s: 'Grad-CAM heatmap showing where the model looked.' },
+    compare:  { t: 'Model comparison',  s: 'ResNet50 vs EfficientNet-B0 · macro metrics + per-class F1.' },
+    eval:     { t: 'Evaluation',        s: 'Confusion matrix and per-class F1 on PlantDoc real-world test set.' },
+    domain:   { t: 'Domain adaptation', s: 'Why fine-tuning on real-world PlantDoc images matters.' },
+    about:    { t: 'About & limits',    s: 'Known limitations, tech stack, and credits.' },
+  };
 
-dropZone.addEventListener('click',  () => fileInput.click());
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave',  () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-over');
-  const f = e.dataTransfer.files[0];
-  if (f) setFile(f);
-});
-fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+  const state = {
+    view: 'diagnose',
+    currentFile: null,
+    currentBlobUrl: null,
+    currentPrediction: null,
+    gradcamUrl: null,
+    loaded: { compare: false, eval: false },
+    evalModel: 'resnet50',
+    perClass: null,
+    metricsAll: null,
+  };
 
-function setFile(file) {
-  selectedFile = file;
-  const url = URL.createObjectURL(file);
-  previewImg.src = url;
-  previewWrap.style.display = 'block';
-  predictBtn.disabled = false;
-  document.getElementById('results-section').style.display = 'none';
-}
-
-predictBtn.addEventListener('click', async () => {
-  if (!selectedFile) return;
-  predictBtn.disabled = true;
-  spinner.style.display = 'block';
-  document.getElementById('results-section').style.display = 'none';
-
-  const fd = new FormData();
-  fd.append('image', selectedFile);
-
-  try {
-    const res  = await fetch('/api/predict', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.error) { alert(data.error); return; }
-    renderResults(data.predictions);
-  } catch(e) {
-    alert('Prediction failed. Is the server running?');
-  } finally {
-    spinner.style.display = 'none';
-    predictBtn.disabled = false;
+  function setView(name) {
+    state.view = name;
+    $$('[data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === name));
+    $$('[data-view]').forEach(v => v.hidden = (v.dataset.view !== name));
+    const meta = TITLES[name];
+    if (meta) { $('#topTitle').textContent = meta.t; $('#topSub').textContent = meta.s; }
+    if (name === 'compare' && !state.loaded.compare) loadCompare();
+    if (name === 'eval' && !state.loaded.eval) loadEval();
+    if (name === 'xai') paintXai();
+    if (window.lucide) lucide.createIcons();
   }
-});
+  $$('[data-nav]').forEach(b => b.addEventListener('click', () => setView(b.dataset.nav)));
+  $$('[data-nav-to]').forEach(b => b.addEventListener('click', () => setView(b.dataset.navTo)));
 
-function renderResults(preds) {
-  const top  = preds[0];
-  const info = top.info;
+  async function loadSamples() {
+    const r = await fetch('/api/samples');
+    const data = await r.json();
+    const grid = $('#sampleGrid');
+    grid.innerHTML = data.samples.map(s => `
+      <button data-sample="${s.url}" class="group relative aspect-square rounded-lg overflow-hidden border border-border hover:border-brand/50 transition-colors">
+        <img src="${s.url}" class="w-full h-full object-cover" loading="lazy" alt="${s.label}">
+        <div class="absolute inset-0 bg-gradient-to-t from-bg/90 via-transparent to-transparent opacity-90"></div>
+        <div class="absolute left-1.5 right-1.5 bottom-1 text-[10px] font-medium leading-tight text-text drop-shadow">${s.label}</div>
+        ${s.difficulty === 'hard' ? `<span class="absolute top-1 right-1 px-1 py-0.5 rounded text-[9px] font-semibold uppercase bg-red/80 text-bg">hard</span>` : ''}
+      </button>`).join('');
+    $$('#sampleGrid [data-sample]').forEach(b =>
+      b.addEventListener('click', () => useSample(b.dataset.sample))
+    );
+  }
 
-  document.getElementById('r-disease').textContent  = top.label.replace(/__/g, ' › ').replace(/_/g, ' ');
-  document.getElementById('r-common').textContent   = info.common;
-  document.getElementById('r-conf').textContent     = (top.probability * 100).toFixed(1) + '%';
-  document.getElementById('r-treatment').textContent = '💊 ' + info.treatment;
+  async function useSample(url) {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    handleFile(new File([blob], url.split('/').pop(), { type: blob.type || 'image/jpeg' }));
+  }
 
-  const sev = document.getElementById('r-severity');
-  sev.textContent  = info.severity.toUpperCase();
-  sev.className    = 'severity-badge severity-' + info.severity;
-
-  const barsEl = document.getElementById('prob-bars');
-  barsEl.innerHTML = '';
-  preds.forEach(p => {
-    const pct = (p.probability * 100).toFixed(1);
-    const label = p.label.replace(/__/g, ' › ').replace(/_/g, ' ');
-    barsEl.innerHTML += `
-      <div class="prob-bar">
-        <div class="prob-bar-label">
-          <span class="cls">${label}</span>
-          <span class="pct">${pct}%</span>
-        </div>
-        <div class="prob-bar-track">
-          <div class="prob-bar-fill" style="width:${pct}%"></div>
-        </div>
-      </div>`;
+  const dz = $('#dropzone'), fi = $('#fileInput');
+  dz.addEventListener('click', () => fi.click());
+  fi.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); dz.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); dz.classList.remove('dragover');
+  }));
+  dz.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0]; if (f) handleFile(f);
   });
 
-  document.getElementById('results-section').style.display = 'block';
-}
+  $('#clearBtn').addEventListener('click', (e) => { e.stopPropagation(); resetInput(); });
 
-loadMetrics();
+  function resetInput() {
+    if (state.currentBlobUrl) URL.revokeObjectURL(state.currentBlobUrl);
+    state.currentFile = null; state.currentBlobUrl = null;
+    state.currentPrediction = null; state.gradcamUrl = null;
+    $('#imgStack').classList.add('hidden');
+    $('#emptyState').classList.remove('hidden');
+    $('#clearBtn').classList.add('hidden');
+    $('#viewToggle').classList.add('hidden');
+    $('#resultPanel').classList.add('hidden');
+    $('#resultLoading').classList.add('hidden');
+    $('#resultEmpty').classList.remove('hidden');
+  }
+
+  async function handleFile(file) {
+    state.currentFile = file;
+    if (state.currentBlobUrl) URL.revokeObjectURL(state.currentBlobUrl);
+    state.currentBlobUrl = URL.createObjectURL(file);
+    $('#origImg').src = state.currentBlobUrl;
+    $('#camImg').style.opacity = '0';
+    state.gradcamUrl = null;
+    $('#imgStack').classList.remove('hidden');
+    $('#emptyState').classList.add('hidden');
+    $('#clearBtn').classList.remove('hidden');
+
+    $('#resultEmpty').classList.add('hidden');
+    $('#resultPanel').classList.add('hidden');
+    $('#resultLoading').classList.remove('hidden');
+    $('#resultLoading').classList.add('flex');
+    // reset Original/Grad-CAM toggle visually
+    $$('.layer-btn').forEach(b => {
+      const isOrig = b.dataset.layer === 'original';
+      b.classList.toggle('active', isOrig);
+      b.classList.toggle('text-muted', !isOrig);
+    });
+
+    try {
+      const fd = new FormData(); fd.append('image', file);
+      const r = await fetch('/api/predict', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Prediction failed');
+      state.currentPrediction = data.predictions;
+      renderResult(data.predictions);
+    } catch (e) {
+      $('#resultLoading').classList.add('hidden');
+      $('#resultEmpty').classList.remove('hidden');
+      const sub = $('#resultEmpty').querySelectorAll('div')[2];
+      if (sub) sub.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  $$('.layer-btn').forEach(b => b.addEventListener('click', async () => {
+    if (!state.currentFile) return;
+    $$('.layer-btn').forEach(x => { x.classList.toggle('active', x === b); x.classList.toggle('text-muted', x !== b); });
+    if (b.dataset.layer === 'gradcam') {
+      await ensureGradcam();
+      $('#camImg').style.opacity = '1';
+    } else {
+      $('#camImg').style.opacity = '0';
+    }
+  }));
+
+  async function ensureGradcam() {
+    if (state.gradcamUrl) {
+      $('#camImg').src = state.gradcamUrl;
+      return;
+    }
+    const fd = new FormData(); fd.append('image', state.currentFile);
+    const r = await fetch('/api/gradcam', { method: 'POST', body: fd });
+    const data = await r.json();
+    state.gradcamUrl = data.overlay;
+    $('#camImg').src = state.gradcamUrl;
+  }
+
+  function renderResult(preds) {
+    const top = preds[0];
+    $('#diagTitle').textContent = top.pretty;
+    $('#diagCommon').textContent = top.info.common;
+    const conf = top.probability;
+    $('#confText').textContent = pct(conf);
+    setTimeout(() => $('#confBar').style.width = (conf * 100) + '%', 30);
+    const sev = SEV[top.info.severity] || SEV.medium;
+    $('#sevBadge').className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider shrink-0 ' + sev.cls;
+    $('#sevBadge').textContent = top.info.severity === 'none' ? 'Healthy' : 'Severity · ' + sev.label;
+
+    let confHint = '';
+    if (conf >= 0.85) confHint = 'High confidence — diagnosis is reliable.';
+    else if (conf >= 0.6) confHint = 'Moderate confidence — verify against the top-5 alternatives.';
+    else if (conf >= 0.4) confHint = 'Low confidence — review the top-5 carefully.';
+    else confHint = 'Very low confidence — image may be out-of-distribution.';
+    $('#confHint').textContent = confHint;
+    $('#confBar').className = 'conf-bar h-full rounded-full ' + (conf >= 0.85 ? 'bg-emerald' : conf >= 0.6 ? 'bg-brand-2' : conf >= 0.4 ? 'bg-amber' : 'bg-red');
+
+    $('#top5').innerHTML = preds.map((p, i) => `
+      <div class="${i === 0 ? '' : 'opacity-80'}">
+        <div class="flex items-center justify-between text-[12.5px] mb-1">
+          <span class="${i === 0 ? 'font-medium' : ''}">${p.pretty}</span>
+          <span class="num tabular text-muted">${pct(p.probability)}</span>
+        </div>
+        <div class="h-1 bg-elevated rounded-full overflow-hidden">
+          <div class="h-full ${i === 0 ? 'bg-emerald' : 'bg-brand/50'} rounded-full conf-bar" style="width:0%"></div>
+        </div>
+      </div>`).join('');
+    setTimeout(() => {
+      $$('#top5 .conf-bar').forEach((bar, i) => bar.style.width = (preds[i].probability * 100) + '%');
+    }, 40);
+
+    $('#treatmentText').textContent = top.info.treatment;
+
+    $('#resultLoading').classList.add('hidden');
+    $('#resultLoading').classList.remove('flex');
+    $('#resultPanel').classList.remove('hidden');
+    $('#resultPanel').classList.add('flex');
+    $('#viewToggle').classList.remove('hidden');
+    $('#viewToggle').classList.add('flex');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  $('#explainBtn').addEventListener('click', async () => {
+    if (!state.currentFile) return;
+    setView('xai');
+  });
+
+  async function paintXai() {
+    if (!state.currentFile) { $('#xaiStack').classList.add('hidden'); $('#xaiEmpty').classList.remove('hidden'); return; }
+    $('#xaiEmpty').classList.add('hidden'); $('#xaiStack').classList.remove('hidden');
+    $('#xaiOrig').src = state.currentBlobUrl;
+    await ensureGradcam();
+    $('#xaiCam').src = state.gradcamUrl;
+    applyXaiMode('original');
+    $$('.xai-btn').forEach(b => {
+      const isOrig = b.dataset.xai === 'original';
+      b.classList.toggle('active', isOrig);
+      b.classList.toggle('text-muted', !isOrig);
+    });
+  }
+  function applyXaiMode(mode) {
+    if (mode === 'original') { $('#xaiOrig').style.opacity = '1'; $('#xaiCam').style.opacity = '0'; $('#xaiCam').style.clipPath = 'none'; }
+    else if (mode === 'gradcam') { $('#xaiOrig').style.opacity = '1'; $('#xaiCam').style.opacity = '1'; $('#xaiCam').style.clipPath = 'none'; }
+    else if (mode === 'split') { $('#xaiOrig').style.opacity = '1'; $('#xaiCam').style.opacity = '1'; $('#xaiCam').style.clipPath = 'inset(0 0 0 50%)'; }
+  }
+  $$('.xai-btn').forEach(b => b.addEventListener('click', () => {
+    $$('.xai-btn').forEach(x => { x.classList.toggle('active', x === b); x.classList.toggle('text-muted', x !== b); });
+    applyXaiMode(b.dataset.xai);
+  }));
+
+  async function loadCompare() {
+    const [mr, pr] = await Promise.all([
+      fetch('/api/metrics-all').then(r => r.json()),
+      fetch('/api/per-class').then(r => r.json()),
+    ]);
+    state.metricsAll = mr; state.perClass = pr;
+
+    const card = (m) => `
+      <div class="p-3 rounded-lg bg-elevated/40 border border-border">
+        <div class="eyebrow">Accuracy</div>
+        <div class="num text-xl tabular mt-1">${(m.accuracy*100).toFixed(2)}%</div>
+      </div>
+      <div class="p-3 rounded-lg bg-elevated/40 border border-border">
+        <div class="eyebrow">F1 (macro)</div>
+        <div class="num text-xl tabular mt-1">${m.f1_macro.toFixed(3)}</div>
+      </div>
+      <div class="p-3 rounded-lg bg-elevated/40 border border-border">
+        <div class="eyebrow">Precision</div>
+        <div class="num text-xl tabular mt-1">${(m.precision_macro*100).toFixed(2)}%</div>
+      </div>
+      <div class="p-3 rounded-lg bg-elevated/40 border border-border">
+        <div class="eyebrow">Recall</div>
+        <div class="num text-xl tabular mt-1">${(m.recall_macro*100).toFixed(2)}%</div>
+      </div>`;
+    if (mr.resnet50) $('#resnetCard').innerHTML = card(mr.resnet50);
+    if (mr.efficientnet_b0) $('#effnetCard').innerHTML = card(mr.efficientnet_b0);
+
+    const labels = ['Accuracy', 'F1 (macro)', 'Precision', 'Recall'];
+    const r = mr.resnet50 || {}, e = mr.efficientnet_b0 || {};
+    new Chart($('#cmpChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'ResNet50',        data: [r.accuracy, r.f1_macro, r.precision_macro, r.recall_macro], backgroundColor: '#4F8F5F', borderRadius: 6, barPercentage: 0.7, categoryPercentage: 0.6 },
+          { label: 'EfficientNet-B0', data: [e.accuracy, e.f1_macro, e.precision_macro, e.recall_macro], backgroundColor: '#F59E0B', borderRadius: 6, barPercentage: 0.7, categoryPercentage: 0.6 },
+        ]
+      },
+      options: chartOpts({ y: { max: 1.0, ticks: { callback: v => (v*100).toFixed(0)+'%' } } })
+    });
+
+    const rRows = pr.resnet50 || [];
+    const eMap = Object.fromEntries((pr.efficientnet_b0 || []).map(x => [x.class, x.f1]));
+    const sorted = [...rRows].sort((a,b) => b.f1 - a.f1);
+    new Chart($('#perClassChart'), {
+      type: 'bar',
+      data: {
+        labels: sorted.map(x => x.pretty),
+        datasets: [
+          { label: 'ResNet50',        data: sorted.map(x => x.f1),                backgroundColor: '#4F8F5F', borderRadius: 4, barPercentage: 0.9, categoryPercentage: 0.55 },
+          { label: 'EfficientNet-B0', data: sorted.map(x => eMap[x.class] ?? 0),  backgroundColor: '#F59E0B', borderRadius: 4, barPercentage: 0.9, categoryPercentage: 0.55 },
+        ]
+      },
+      options: chartOpts({
+        x: { ticks: { autoSkip: false, font: { size: 9 }, maxRotation: 55, minRotation: 55 } },
+        y: { max: 1.0 }
+      })
+    });
+
+    state.loaded.compare = true;
+  }
+
+  async function loadEval() {
+    if (!state.metricsAll) state.metricsAll = await fetch('/api/metrics-all').then(r => r.json());
+    if (!state.perClass)   state.perClass   = await fetch('/api/per-class').then(r => r.json());
+    paintEval();
+    state.loaded.eval = true;
+  }
+  function paintEval() {
+    const m = (state.metricsAll || {})[state.evalModel] || {};
+    const rows = (state.perClass || {})[state.evalModel] || [];
+
+    $('#evalStats').innerHTML = `
+      <div class="bg-surface border border-border rounded-xl p-4"><div class="eyebrow">Accuracy</div><div class="num text-3xl tabular mt-1 text-emerald">${((m.accuracy||0)*100).toFixed(2)}%</div><div class="text-[11px] text-muted mt-0.5">PlantDoc · TTA</div></div>
+      <div class="bg-surface border border-border rounded-xl p-4"><div class="eyebrow">F1 (macro)</div><div class="num text-3xl tabular mt-1">${(m.f1_macro||0).toFixed(3)}</div><div class="text-[11px] text-muted mt-0.5">27 classes</div></div>
+      <div class="bg-surface border border-border rounded-xl p-4"><div class="eyebrow">Precision</div><div class="num text-3xl tabular mt-1">${((m.precision_macro||0)*100).toFixed(2)}%</div><div class="text-[11px] text-muted mt-0.5">Macro avg</div></div>
+      <div class="bg-surface border border-border rounded-xl p-4"><div class="eyebrow">Recall</div><div class="num text-3xl tabular mt-1">${((m.recall_macro||0)*100).toFixed(2)}%</div><div class="text-[11px] text-muted mt-0.5">Macro avg</div></div>`;
+
+    const cmFile = state.evalModel === 'resnet50' ? 'cm_resnet50_plantdoc_test.png' : 'cm_efficientnet_b0_plantdoc_test.png';
+    $('#cmImg').src = '/static/' + cmFile;
+
+    const sorted = [...rows].sort((a,b) => b.f1 - a.f1);
+    $('#evalPerClass').innerHTML = sorted.map(r => {
+      const color = r.f1 >= 0.7 ? 'bg-emerald' : r.f1 >= 0.4 ? 'bg-amber' : 'bg-red';
+      return `<div class="flex items-center gap-2 text-[12px]">
+        <div class="flex-1 min-w-0 truncate">${r.pretty}</div>
+        <div class="w-24 h-1.5 bg-elevated rounded-full overflow-hidden"><div class="${color} h-full" style="width:${r.f1*100}%"></div></div>
+        <div class="num tabular w-10 text-right text-muted">${r.f1.toFixed(2)}</div>
+      </div>`;
+    }).join('');
+  }
+  $$('.eval-btn').forEach(b => b.addEventListener('click', () => {
+    state.evalModel = b.dataset.eval;
+    $$('.eval-btn').forEach(x => { x.classList.toggle('active', x === b); x.classList.toggle('text-muted', x !== b); });
+    paintEval();
+  }));
+
+  function chartOpts(scales = {}) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeOutCubic' },
+      plugins: {
+        legend: { labels: { color: '#F5F5F0', font: { family: 'Inter', size: 12 }, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10 } },
+        tooltip: { backgroundColor: '#1A211D', borderColor: '#1F2622', borderWidth: 1, titleColor: '#F5F5F0', bodyColor: '#F5F5F0', padding: 10, cornerRadius: 6 },
+      },
+      scales: {
+        x: Object.assign({ grid: { color: '#1F2622', drawBorder: false }, ticks: { color: '#8A938E', font: { family: 'Inter', size: 11 } } }, scales.x || {}),
+        y: Object.assign({ grid: { color: '#1F2622', drawBorder: false }, ticks: { color: '#8A938E', font: { family: 'Inter', size: 11 } }, beginAtZero: true }, scales.y || {}),
+      }
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.lucide) lucide.createIcons();
+    loadSamples();
+  });
+})();
 </script>
+
 </body>
 </html>
